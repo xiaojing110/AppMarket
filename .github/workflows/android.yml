@@ -11,6 +11,9 @@ on:
       - "doc/*"
       - ".github/workflows/android.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -53,6 +56,21 @@ jobs:
           KEY_ALIAS: appmarket
           KEY_PASSWORD: appmarket123
 
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --pretty=format:"- %s (%h)" -n 20)
+          else
+            LOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)")
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$LOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Upload APK Artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
@@ -61,9 +79,21 @@ jobs:
           archive: false
 
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build {0}', github.run_number) }}
+          body: |
+            ## 更新历史
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ---
+
+            **构建信息**
+            - Commit: `${{ github.sha }}`
+            - 分支/Tag: `${{ github.ref_name }}`
+            - 触发者: @${{ github.actor }}
           files: ${{ env.APK_FILE }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
