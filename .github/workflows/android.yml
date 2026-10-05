@@ -30,8 +30,18 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Decode Signing Key
-        run: echo ${{ secrets.SIGNING_KEY }} | base64 -d > keystore.jks
+      - name: Generate Keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore ${{ github.workspace }}/keystore.jks \
+            -alias appmarket \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -storetype JKS \
+            -storepass appmarket123 \
+            -keypass appmarket123 \
+            -dname "CN=AppMarket, OU=Dev, O=AppMarket, L=City, ST=State, C=CN"
 
       - name: Build Release APK
         run: |
@@ -39,9 +49,9 @@ jobs:
           echo "APK_FILE=$(find app/android/build/outputs/apk/release -name '*.apk' | head -n 1)" >> $GITHUB_ENV
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
-          KEYSTORE_PASS: ${{ secrets.KEY_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASS: appmarket123
+          KEY_ALIAS: appmarket
+          KEY_PASSWORD: appmarket123
 
       - name: Upload APK Artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -49,6 +59,13 @@ jobs:
         with:
           path: ${{ env.APK_FILE }}
           archive: false
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_FILE }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Display APK Hashes
         run: |
